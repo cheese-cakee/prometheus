@@ -20,6 +20,7 @@ import (
 	"math"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -639,6 +640,66 @@ func funcSortDesc(vectorVals []Vector, _ Matrix, _ parser.Expressions, _ *EvalNo
 	return Vector(byValueSorter), nil
 }
 
+// compareLabelValues compares two label values for sorting.
+// It first tries to parse both values as floats and compare numerically.
+// This handles scientific notation (e.g., "1e+06") correctly.
+// If parsing fails for either value, it falls back to natural string sorting.
+// Special handling: +Inf sorts before other numeric values (for histogram bucket ordering).
+// When numeric values are equal, falls back to string comparison for stable sorting.
+func compareLabelValues(a, b string) int {
+	fa, aErr := strconv.ParseFloat(a, 64)
+	fb, bErr := strconv.ParseFloat(b, 64)
+
+	if aErr == nil && bErr == nil {
+		if math.IsNaN(fa) && math.IsNaN(fb) {
+			return 0
+		}
+		if math.IsNaN(fa) {
+			return -1
+		}
+		if math.IsNaN(fb) {
+			return 1
+		}
+		if math.IsInf(fa, 1) && math.IsInf(fb, 1) {
+			return 0
+		}
+		if math.IsInf(fa, 1) {
+			return -1
+		}
+		if math.IsInf(fb, 1) {
+			return 1
+		}
+		if math.IsInf(fa, -1) && math.IsInf(fb, -1) {
+			return 0
+		}
+		if math.IsInf(fa, -1) {
+			return 1
+		}
+		if math.IsInf(fb, -1) {
+			return -1
+		}
+		if fa < fb {
+			return -1
+		}
+		if fa > fb {
+			return 1
+		}
+		// Values are numerically equal, use string comparison for stable sort
+		if a < b {
+			return -1
+		}
+		if a > b {
+			return 1
+		}
+		return 0
+	}
+
+	if natsort.Compare(a, b) {
+		return -1
+	}
+	return 1
+}
+
 // === sort_by_label(vector parser.ValueTypeVector, label parser.ValueTypeString...) (Vector, Annotations) ===
 func funcSortByLabel(vectorVals []Vector, _ Matrix, args parser.Expressions, _ *EvalNodeHelper) (Vector, annotations.Annotations) {
 	lbls := stringSliceFromArgs(args[1:])
@@ -651,7 +712,7 @@ func funcSortByLabel(vectorVals []Vector, _ Matrix, args parser.Expressions, _ *
 				continue
 			}
 
-			if natsort.Compare(lv1, lv2) {
+			if compareLabelValues(lv1, lv2) < 0 {
 				return -1
 			}
 
@@ -677,7 +738,7 @@ func funcSortByLabelDesc(vectorVals []Vector, _ Matrix, args parser.Expressions,
 				continue
 			}
 
-			if natsort.Compare(lv1, lv2) {
+			if compareLabelValues(lv1, lv2) < 0 {
 				return +1
 			}
 

@@ -880,6 +880,35 @@ eval instant at 50m sort_by_label(node_uname_info, "release")
 	node_uname_info{job="node_exporter", instance="4m5", release="1.11.3"} 100
 	node_uname_info{job="node_exporter", instance="4m1000", release="1.111.3"} 100
 
+# Tests for sort_by_label with scientific notation (issue #17799)
+clear
+load 5m
+	http_requests{job="api", le="+Inf"} 0
+	http_requests{job="api", le="100"} 0
+	http_requests{job="api", le="100.0"} 0
+	http_requests{job="api", le="1000"} 0
+	http_requests{job="api", le="1000.0"} 0
+	http_requests{job="api", le="10000"} 0
+	http_requests{job="api", le="10000.0"} 0
+	http_requests{job="api", le="100000"} 0
+	http_requests{job="api", le="100000.0"} 0
+	http_requests{job="api", le="1e+06"} 0
+	http_requests{job="api", le="1e+07"} 0
+	http_requests{job="api", le="1e+08"} 0
+	http_requests{job="api", le="1e+09"} 0
+	http_requests{job="api", le="1e-05"} 0
+	http_requests{job="api", le="0.001"} 0
+
+# sort_by_label should sort scientific notation numerically, not lexicographically
+# The key fix: 1e+06 should sort AFTER 100000, not before (as it did with lexicographic sort)
+eval instant at 50m sort_by_label(http_requests, "le")
+	expect ordered
+
+# Test sort_by_label_desc with scientific notation
+# In descending order, 1e+09 should be first
+eval instant at 50m sort_by_label_desc(http_requests, "le")
+	expect ordered
+
 # Tests for double_exponential_smoothing
 clear
 
